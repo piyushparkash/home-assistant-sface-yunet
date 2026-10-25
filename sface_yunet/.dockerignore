@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+*.db*
+*.sqlite*
+*.onnx
+*.jpg
+*.jpeg
+*.png
+rtsp_creds.json
+options.json
+data
+trained
+models
+*.log
+*.jsonl
