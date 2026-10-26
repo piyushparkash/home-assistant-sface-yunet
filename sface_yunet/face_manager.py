@@ -197,7 +197,7 @@ class FaceManager:
             except queue.Empty:
                 continue
             try:
-                camera=next((c for c in cameras if c['entity']==entity),None)
+                camera=next((c for c in self.cameras() if c['entity']==entity),None)
                 if not camera:
                     continue
                 image=supervisor('/core/api/camera_proxy/'+entity,image=True)

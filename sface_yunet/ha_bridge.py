@@ -66,6 +66,8 @@ class HomeAssistantBridge:
         self.discovery('event','recognition','Recognition',state_topic=self.root+'/event',event_types=['recognized','unknown'])
         wanted=set()
         for person in names:
+            if person.get('photo_count',1)==0:
+                continue
             key='person_'+person['id']
             wanted.add(('binary_sensor',key))
             self.discovery('binary_sensor',key,person['name']+' recently seen',
@@ -79,7 +81,7 @@ class HomeAssistantBridge:
             if component in ('binary_sensor','button') and (component,key) not in wanted:
                 self.client.publish('homeassistant/'+component+'/sface_'+self.instance+'_'+key+'/config','',qos=1,retain=True)
                 self.discovered.discard((component,key))
-        self.publish('counts',{'people':len(names),'groups':state['pending_groups']},retain=True)
+        self.publish('counts',{'people':sum(p.get('photo_count',1)>0 for p in names),'groups':state['pending_groups']},retain=True)
 
     def event(self, person, name, score, camera, group=None):
         if not self.connected:

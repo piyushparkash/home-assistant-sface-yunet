@@ -140,9 +140,13 @@ def vectorize_upload(img):
     return face_jpeg(img,fs[0]),embed(img,fs[0])
 
 
-def observe_face(img, face, vector, candidate, camera):
-    accepted=bool(candidate and candidate['score']>=ACCEPT and
+def accepted_match(candidate):
+    return bool(candidate and candidate['score']>=ACCEPT and
                   (candidate['second_score'] is None or candidate['score']-candidate['second_score']>=float(os.environ.get('MATCH_MARGIN','0.05'))))
+
+
+def observe_face(img, face, vector, candidate, camera):
+    accepted=accepted_match(candidate)
     group=None
     if not accepted and os.environ.get('COLLECT_UNKNOWNS','true').lower()=='true':
         if min(face[2:4])>=60 and float(face[14])>=0.85:
@@ -243,7 +247,7 @@ def _draw_annotated(img, faces):
     for f in faces:
         x, y, w, h = [int(round(v)) for v in f["box"]]
         userid, score = f.get("userid"), f.get("score", 0.0)
-        if userid and score >= ACCEPT:
+        if userid and f.get('recognized',score >= ACCEPT):
             color, label = BOX_COLORS["known"], f"{userid.replace('_', ' ').title()} {score:.2f}"
         elif userid:
             color, label = BOX_COLORS["low"], f"{userid.replace('_', ' ').title()}? {score:.2f}"
@@ -332,6 +336,7 @@ class LiveCam:
                         m = match(vector) if templates else None
                         if m:
                             entry.update(m)
+                        entry['recognized']=accepted_match(m)
                         if time.time()-self.last_review>=10:
                             observe_face(img,f,vector,m,self.name)
                         faces.append(entry)

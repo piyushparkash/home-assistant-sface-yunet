@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 import urllib.error
 import urllib.request
 
@@ -111,6 +112,23 @@ class ReviewTests(unittest.TestCase):
                 self.manager.save_camera(data)
         self.manager.save_camera({'entity':'camera.test','name':'Test camera','interval':60})
         self.assertEqual(self.manager.cameras()[0]['interval'],60)
+
+    def test_first_scan_after_camera_is_added_is_not_dropped(self):
+        self.manager.recognize=lambda *args:{'success':True,'faces':[]}
+        with patch('face_manager.supervisor',return_value=JPEG):
+            self.manager.start()
+            try:
+                time.sleep(.05)
+                self.manager.save_camera({'entity':'camera.new','name':'New camera','interval':0})
+                self.manager.enqueue({'camera_entity':'camera.new'})
+                for attempt in range(100):
+                    if self.manager.camera_status.get('camera.new'):
+                        break
+                    time.sleep(.01)
+                self.assertTrue(self.manager.camera_status['camera.new']['ok'])
+            finally:
+                self.manager.close()
+                self.manager.thread.join(timeout=2)
 
     def test_ui_rejects_csrf_and_serves_photos_privately(self):
         server=ThreadingHTTPServer(('127.0.0.1',0),handler_for(self.manager))
