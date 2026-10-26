@@ -68,6 +68,7 @@ def exercise(low_memory=False):
         finally:
             process.terminate()
             process.wait(timeout=10)
+            assert process.returncode == 0, 'Server did not shut down cleanly'
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ Endpoints (all JSON unless noted):
   GET  /live/<camera>     multipart/x-mixed-replace MJPEG, boxes+names drawn live (see LiveCam)
 The trained-photo folder is the single source of truth: /sync makes the embedding DB match it.
 """
-import os, sys, json, time, sqlite3, threading, glob
+import os, sys, json, time, sqlite3, threading, glob, signal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np
 import cv2
@@ -364,4 +364,20 @@ if __name__ == "__main__":
     with lock:
         rebuild_templates()
     log(f"sface_server up on :{PORT}; trained dir {TRAINED}; enrolled {counts}")
-    ThreadingHTTPServer((BIND_HOST, PORT), Handler).serve_forever()
+    server = ThreadingHTTPServer((BIND_HOST, PORT), Handler)
+
+    def request_shutdown(signum, frame):
+        # shutdown() must run outside the thread executing serve_forever().
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGTERM, request_shutdown)
+    signal.signal(signal.SIGINT, request_shutdown)
+    try:
+        server.serve_forever()
+    finally:
+        for cam in list(LiveCam._all.values()):
+            cam.stop_flag = True
+        server.server_close()
+        with lock:
+            db.close()
+        log("sface_server shutdown complete")

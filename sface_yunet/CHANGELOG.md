@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- Handle SIGTERM/SIGINT, stop the HTTP server, and close SQLite cleanly.
+- Verify graceful shutdown in the smoke tests.
+
 ## 1.0.1
 
 - Preserve private RTSP credential files when migrating from a local app.
