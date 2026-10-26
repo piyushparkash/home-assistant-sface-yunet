@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.0
+
+- Add an Ingress face library with uploads, display-name editing and sample removal.
+- Group unknown faces for explicit review; assign selected photos to a person.
+- Keep managed enrollment and review data in a separate private database; preserve
+  the legacy database and read-only trained photos.
+- Add bounded unknown retention, secure deletion, and minimum face-quality checks.
+- Add Home Assistant camera selection, scheduled/on-demand scans and MQTT scan buttons.
+- Discover recognition events, per-person recently-seen sensors, enrollment and review counts.
+- Protect management mutations with CSRF tokens and restrict the UI listener to Ingress/local access.
+- Extend backend, security, migration and desktop/mobile browser tests.
+
+The app now requests Home Assistant API access to list cameras and obtain snapshots.
+Existing training paths, recognition URLs and stable person IDs remain unchanged.
+MQTT requires a broker and the Home Assistant MQTT integration. Unknown collection
+is enabled by default; disable it in app options if desired. Stored unknown photos
+expire after seven days by default. Grouping suggestions always require human review.
+
 ## 1.0.2
 
 - Handle SIGTERM/SIGINT, stop the HTTP server, and close SQLite cleanly.

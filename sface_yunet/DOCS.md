@@ -1,5 +1,91 @@
 # Setup and usage
 
+## Face library UI
+
+Select **Open Web UI** on the app page. The UI is proxied and authenticated through
+Home Assistant Ingress; its separate listener accepts only Supervisor and local
+host connections. Create the configured training folder once before the first
+start. Existing installations retain their selected training path.
+
+- **People:** upload a clear photo with exactly one face, create a person or choose
+  an existing person, rename their display name, or remove individual photos.
+- **Review inbox:** unknown crops are grouped by SFace similarity. Select only clear
+  photos of the same person and assign them to an existing or new name. Unselected
+  photos stay for review. You can dismiss a mistaken group. A person may appear in
+  several groups; select the same existing person to enroll each group.
+- **Cameras & automations:** choose an existing Home Assistant camera, scan it now,
+  or set a 30/60/120/300-second snapshot schedule. On-demand is the default. Start
+  with one-minute scans on a Pi. A failed camera snapshot is shown in the UI.
+
+New UI photos, vectors, display names, ignored legacy samples and unknown groups
+are stored in private `/data/review.db`. The old `/data/faces.db` and original
+training files are preserved. Removing a legacy photo hides it from recognition;
+the source file remains read-only. Managed photos removed through the UI are deleted.
+Display-name changes keep `person_id` stable for automations. At most 100 managed
+photos can be enrolled per person.
+
+Unknown collection runs on `/recognize` requests, configured camera snapshots,
+and live overlays while viewed (sampled at most once every ten seconds per stream).
+It stores only face crops meeting minimum size and detection-score checks.
+By default it keeps up to six review photos per group, 100 groups and seven days
+of history. Similarity is a suggestion, not proof that all photos show one person.
+Review every selected image before naming it. No identity is enrolled automatically.
+
+## Home Assistant automation entities
+
+Install **Mosquitto broker** and set up Home Assistant's **MQTT integration**.
+With `mqtt_enabled: true`, the app obtains broker credentials internally from
+Supervisor and publishes discovery. No account token or broker password is entered
+in the UI. Look under **Settings > Devices & services > MQTT** for the
+**SFace face recognition** device.
+
+| Entity (default ID) | Use |
+| --- | --- |
+| `event.sface_recognition` | Timestamped recognized/unknown events with person ID, display name, camera, score and group ID |
+| `sensor.sface_last_recognized` | Last accepted person's display name and recognition attributes |
+| `sensor.sface_known_people` | Number of enrolled people, including legacy enrollments |
+| `sensor.sface_pending_groups` | Number of unknown groups waiting for review |
+| `binary_sensor.sface_person_<person_id>` | On for two minutes after an accepted sighting; this is recent camera visibility, not home presence |
+| `button.sface_scan_camera_<camera_name>` | Request a snapshot scan of a configured camera |
+
+Home Assistant may suffix entity IDs if another device already uses those IDs.
+The UI reports MQTT connection/setup status. Discovery remains optional; recognition
+and the face library work when the broker is down. Events generated while offline
+are not replayed as fresh sightings after reconnecting. Event messages are not
+retained; discovery and the last-recognized summary are retained. Recently-seen
+sensors reset off after app restart. Repeated sightings of the same person/group
+from the same source are throttled to one event per 15 seconds.
+
+Example notification on a recognized person (replace the person ID/entity as needed):
+
+```yaml
+alias: Notify when a face is recognized
+triggers:
+  - trigger: state
+    entity_id: event.sface_recognition
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state is not none
+         and trigger.to_state.attributes.get('event_type') == 'recognized'
+         and trigger.to_state.attributes.get('person_id') == 'alex' }}
+actions:
+  - action: persistent_notification.create
+    data:
+      title: Face recognized
+      message: >-
+        {{ trigger.to_state.attributes.display_name }} was seen by
+        {{ trigger.to_state.attributes.camera }}.
+```
+
+To scan after a camera's motion sensor changes, use a normal automation action
+`button.press` targeting its discovered SFace scan button. The JSON recognition
+events are also available on `sface/<instance_id>/event`; the UI reports that
+instance's topic prefix. Existing HTTP clients can add `?camera=front_door` or the
+`X-Camera-ID` header to `/recognize` to provide a source label. Clients without a
+label continue working and use `api` as their source. `?collect=false` requests
+recognition without review storage or automation events (useful for diagnostics).
+
 ## Training photos
 
 Create `/config/faces/trained` using Studio Code Server, SSH or another local file
@@ -21,7 +107,7 @@ Folder names become `userid` values. Use several sharp photos with varied angles
 and lighting. Create this folder before starting the app. Avoid Home Assistant's
 `www` folder: files under `www` can be served without authentication.
 
-Start the app, then run the following commands from a terminal on the Home
+For legacy folder-based enrollment, start the app, then run these commands on the Home
 Assistant host (a remote PC cannot reach its loopback API):
 
 ```sh
@@ -45,12 +131,19 @@ filename does not refresh its embedding; use a new filename and sync again.
 | `cv_threads` | `2` | OpenCV worker threads; not a container CPU quota |
 | `detection_width` | `640` | Downscale wider query frames before detection |
 | `detection_score` | `0.6` | YuNet detection cutoff |
-| `recognition_threshold` | `0.363` | Color threshold for live overlays |
+| `recognition_threshold` | `0.363` | Acceptance cutoff for new events/review and overlay coloring |
 | `min_available_memory_mb` | `300` | Refuse recognition below this host-memory level |
+| `collect_unknowns` | `true` | Keep unknown face crops privately for review |
+| `unknown_retention_days` | `7` | Expire unknown groups after this many days without a sighting |
+| `max_unknown_groups` | `100` | Retain at most this many unknown groups (maximum setting 500) |
+| `unknown_group_threshold` | `0.6` | Cosine threshold for grouping unknown faces; higher is more conservative |
+| `match_margin` | `0.05` | Minimum score advantage over the second candidate for accepted events |
+| `mqtt_enabled` | `true` | Publish Home Assistant entities/events through MQTT discovery |
 
-`recognition_threshold` affects overlay coloring. `/recognize` returns the best
-candidate even when its score is low; callers must apply a threshold and any
-second-best margin themselves. The defaults are starting points to tune with
+`/recognize` still returns the best candidate even when its score is low, preserving
+compatibility. It adds `recognized` and, when collected, `unknown_group` fields.
+New automation events apply both `recognition_threshold` and `match_margin`;
+legacy callers can continue applying their own thresholds. The defaults need tuning with
 your own labeled evaluation. This app does not unlock doors or send alerts.
 
 ## API
@@ -110,6 +203,14 @@ own camera entity. Streams capture/infer only while a viewer is connected.
 Private `/data/faces.db` is included when this app is selected for a Supervisor
 backup; cold backups stop the service briefly. Back up training photos with
 Home Assistant configuration, and protect the RTSP configuration with your backups.
+The new `/data/review.db` is also part of the app backup. It includes managed
+enrollment, unknown crops and display names and must be treated as biometric data.
+
+Upgrading from 1.0.x adds the separate review database; it does not import or
+rewrite legacy faces.db rows. Existing recognition clients, camera streams and
+person IDs remain compatible. The app needs `homeassistant_api` access for camera
+listing/snapshots; Supervisor grants this app administrator-level Core API access.
+No Core API credentials are sent to the browser. The training folder stays read-only.
 
 Existing local/standalone installations use a different Supervisor app ID.
 Installing this repository will not automatically move their data. Choose a free

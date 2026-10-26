@@ -24,11 +24,14 @@ checked in CI. Recognition and enrollment require no cloud service or API key.
 3. Install **SFace + YuNet Face Recognition**. Supervisor builds it on your device;
    the first build needs internet to download dependencies and approximately 37 MB
    of checksum-verified models from OpenCV Zoo.
-4. Create a private training folder and add labeled photos as described in the
-   [setup guide](sface_yunet/DOCS.md). Start the app and call `POST /sync` to enroll.
+4. Create the configured training folder once (default `/config/faces/trained`),
+   then start the app and select **Open Web UI**. Upload photos in **People**, or
+   configure a camera and assign names to groups in the **Review inbox**.
+   Existing training folders and `POST /sync` remain supported.
 
-The API listens only on `127.0.0.1:5100`. Home Assistant Core can reach it locally;
-there is no public web UI, ingress panel, or authentication on the API itself.
+The recognition API listens only on `127.0.0.1:5100`. Home Assistant Core can reach
+it locally. Face management is provided through authenticated Home Assistant
+Ingress; the local recognition API itself has no authentication.
 The app needs an installation with Supervisor app support; HACS is not required.
 
 ## Features
@@ -38,6 +41,13 @@ The app needs an installation with Supervisor app support; HACS is not required.
 - Optional live MJPEG overlays, with one shared capture loop per camera.
 - Low-memory refusal and configurable CPU thread count and detection settings.
 - Supervisor start/stop, automatic boot and cold app backups.
+- Face-management UI for uploading photos, naming people and removing samples.
+- Suggested unknown-face groups with selected-photo enrollment and bounded retention.
+- Home Assistant camera picker, on-demand scan buttons and optional scheduled snapshots.
+- MQTT discovery for recognition events, per-person recently-seen sensors and review counts.
+
+Set up the Mosquitto broker app and Home Assistant's MQTT integration to use the
+discovered automation entities. Face management and recognition also work without MQTT.
 
 ## Raspberry Pi 4 resource usage
 
@@ -82,7 +92,7 @@ layers with other apps.
 - [Security and privacy](SECURITY.md)
 - [Report an issue](https://github.com/piyushparkash/home-assistant-sface-yunet/issues)
 
-Your own automations decide when to call the API and how to act on a match. This
+Your own automations decide how to act on recognition events or camera scan buttons. This
 repository does not include household automations, Alexa accounts, camera
 credentials, enrolled identities, face photos, or embeddings. Use recognition
 as an automation aid; similarity scores are not identity guarantees.

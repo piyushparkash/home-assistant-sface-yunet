@@ -12,6 +12,11 @@ import os, sys, json, time, sqlite3, threading, glob, signal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np
 import cv2
+from urllib.parse import parse_qs, urlsplit
+from review_store import ReviewStore
+from face_manager import FaceManager
+from ha_bridge import HomeAssistantBridge
+from web_ui import handler_for
 
 cv2.setNumThreads(int(os.environ.get("CV_THREADS", "2")))
 MODELS = os.environ.get("MODELS_DIR", "/app/models")
@@ -27,13 +32,18 @@ ACCEPT = float(os.environ.get("SFACE_ACCEPT", "0.363"))
 # Optional camera credentials stay in private app data and must never be committed.
 RTSP_CREDS_FILE = os.environ.get("RTSP_CREDS_FILE", os.path.join(DATA, "rtsp_creds.json"))
 
-lock = threading.Lock()
+lock = threading.RLock()
 det = cv2.FaceDetectorYN.create(os.path.join(MODELS, "yunet.onnx"), "", (320, 320), DET_SCORE, 0.3, 5000)
 rec = cv2.FaceRecognizerSF.create(os.path.join(MODELS, "sface.onnx"), "")
 os.makedirs(DATA, exist_ok=True)
 db = sqlite3.connect(os.path.join(DATA, "faces.db"), check_same_thread=False)
 db.execute("create table if not exists emb(person text, file text, vec blob, added real, primary key(person, file))")
 db.commit()
+review = ReviewStore(DATA, int(os.environ.get('UNKNOWN_RETENTION_DAYS','7')),
+                     int(os.environ.get('MAX_UNKNOWN_GROUPS','100')),
+                     float(os.environ.get('UNKNOWN_GROUP_THRESHOLD','0.6')))
+manager = None
+bridge = None
 
 templates = {}   # person -> normalised mean embedding
 counts = {}      # person -> number of photos
@@ -53,14 +63,18 @@ def host_state():
                 break
     except Exception:
         pass
-    return {"mem_available_mb": avail, "load1": round(os.getloadavg()[0], 2)}
+    return {"mem_available_mb": avail, "load1": round(os.getloadavg()[0], 2) if hasattr(os,'getloadavg') else None}
 
 
 def rebuild_templates():
     global templates, counts
     by = {}
-    for person, blob in db.execute("select person, vec from emb"):
-        by.setdefault(person, []).append(np.frombuffer(blob, dtype=np.float32))
+    excluded=review.exclusions()
+    for person, filename, blob in db.execute("select person, file, vec from emb"):
+        if (person,filename) not in excluded:
+            by.setdefault(person, []).append(np.frombuffer(blob, dtype=np.float32))
+    for person,vector in review.embeddings():
+        by.setdefault(person,[]).append(vector)
     templates, counts = {}, {}
     for person, vecs in by.items():
         t = np.mean(vecs, axis=0)
@@ -105,25 +119,72 @@ def match(vec):
             "second_score": round(second[0], 4) if second else None}
 
 
-def do_recognize(data):
+def face_jpeg(img, face):
+    h,w=img.shape[:2]
+    x,y,fw,fh=[float(v) for v in face[:4]]
+    left,top=max(0,int(x-fw*.2)),max(0,int(y-fh*.2))
+    right,bottom=min(w,int(x+fw*1.2)),min(h,int(y+fh*1.2))
+    crop=img[top:bottom,left:right]
+    if crop.size==0:
+        raise ValueError('Face crop is empty')
+    ch,cw=crop.shape[:2]
+    if max(ch,cw)>320:
+        crop=cv2.resize(crop,(max(1,round(cw*320/max(ch,cw))),max(1,round(ch*320/max(ch,cw)))))
+    return cv2.imencode('.jpg',crop,[cv2.IMWRITE_JPEG_QUALITY,85])[1].tobytes()
+
+
+def vectorize_upload(img):
+    fs=detect(img)
+    if len(fs)!=1 or min(fs[0][2:4])<40:
+        raise ValueError('Use a clear photo with exactly one face at least 40 pixels wide')
+    return face_jpeg(img,fs[0]),embed(img,fs[0])
+
+
+def observe_face(img, face, vector, candidate, camera):
+    accepted=bool(candidate and candidate['score']>=ACCEPT and
+                  (candidate['second_score'] is None or candidate['score']-candidate['second_score']>=float(os.environ.get('MATCH_MARGIN','0.05'))))
+    group=None
+    if not accepted and os.environ.get('COLLECT_UNKNOWNS','true').lower()=='true':
+        if min(face[2:4])>=60 and float(face[14])>=0.85:
+            group=review.observe(vector,face_jpeg(img,face),camera)
+    if bridge:
+        if accepted:
+            person=candidate['userid']
+            bridge.event(person,review.names().get(person,person.replace('_',' ').title()),candidate['score'],camera)
+        elif group:
+            bridge.event(None,'Unknown',candidate['score'] if candidate else 0,camera,group)
+    return accepted,group
+
+
+def do_recognize(data, camera='api', collect=True):
     host = host_state()
     if host["mem_available_mb"] is not None and host["mem_available_mb"] < MIN_AVAIL_MB:
         log(f"recognize skipped: host low on memory ({host})")
         return {"success": False, "error": "host low memory", "host": host}
     t0 = time.perf_counter()
+    if not data or len(data)>8*1024*1024:
+        return {"success":False,"error":"image is empty or larger than 8 MiB"}
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         return {"success": False, "error": "bad image"}
     h, w = img.shape[:2]
+    if w*h>20_000_000:
+        return {'success':False,'error':'image exceeds 20 megapixels'}
     t1 = time.perf_counter()
     faces = detect(img)
     t2 = time.perf_counter()
     out = []
     for f in faces:
         entry = {"box": [round(float(x), 1) for x in f[:4]], "det_score": round(float(f[14]), 3)}
-        m = match(embed(img, f)) if templates else None
+        vector=embed(img,f)
+        m = match(vector) if templates else None
         if m:
             entry.update(m)
+        if collect:
+            accepted,group=observe_face(img,f,vector,m,camera)
+            entry['recognized']=accepted
+            if group:
+                entry['unknown_group']=group
         out.append(entry)
     t3 = time.perf_counter()
     return {"success": True, "frame": [w, h], "faces": out, "enrolled": sorted(templates), "host": host,
@@ -156,6 +217,8 @@ def do_sync():
         removed += 1
     db.commit()
     rebuild_templates()
+    if bridge:
+        bridge.refresh()
     log(f"sync: +{added} -{removed} skipped={len(skipped)} people={counts}")
     return {"success": True, "added": added, "removed": removed, "skipped": skipped,
             "people": counts, "ms": round((time.perf_counter() - t0) * 1000)}
@@ -207,6 +270,7 @@ class LiveCam:
         self.cond = threading.Condition()
         self.thread = None
         self.stop_flag = False
+        self.last_review=0
 
     @classmethod
     def get(cls, name):
@@ -264,10 +328,15 @@ class LiveCam:
                     faces = []
                     for f in faces_raw:
                         entry = {"box": [float(v) for v in f[:4]], "_landmarks": [float(v) for v in f[4:14]]}
-                        m = match(embed(img, f)) if templates else None
+                        vector=embed(img,f)
+                        m = match(vector) if templates else None
                         if m:
                             entry.update(m)
+                        if time.time()-self.last_review>=10:
+                            observe_face(img,f,vector,m,self.name)
                         faces.append(entry)
+                    if time.time()-self.last_review>=10:
+                        self.last_review=time.time()
                 _draw_annotated(img, faces)
                 cv2.putText(img, time.strftime("%H:%M:%S"), (8, img.shape[0] - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
@@ -344,11 +413,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             n = int(self.headers.get("Content-Length", "0"))
+            if not 0<=n<=8*1024*1024:
+                self._send({'success':False,'error':'image is larger than 8 MiB'},413)
+                return
             data = self.rfile.read(n) if n else b""
+            parsed=urlsplit(self.path)
+            query=parse_qs(parsed.query)
             with lock:
-                if self.path == "/recognize":
-                    self._send(do_recognize(data))
-                elif self.path == "/sync":
+                if parsed.path == "/recognize":
+                    camera=str(query.get('camera',[self.headers.get('X-Camera-ID','api')])[0])[:64]
+                    self._send(do_recognize(data,camera,query.get('collect',['true'])[0]!='false'))
+                elif parsed.path == "/sync":
                     self._send(do_sync())
                 else:
                     self._send({"success": False, "error": "not found"}, 404)
@@ -364,6 +439,15 @@ if __name__ == "__main__":
     with lock:
         rebuild_templates()
     log(f"sface_server up on :{PORT}; trained dir {TRAINED}; enrolled {counts}")
+    manager=FaceManager(review,lock,lambda:list(db.execute('SELECT person,file FROM emb')),
+                        TRAINED,vectorize_upload,rebuild_templates,do_recognize)
+    bridge=HomeAssistantBridge(review.instance,manager.state,manager.enqueue,
+                               os.environ.get('MQTT_ENABLED','true').lower()=='true')
+    manager.bridge=bridge
+    ui_server=ThreadingHTTPServer(('0.0.0.0',int(os.environ.get('UI_PORT','8099'))),handler_for(manager))
+    threading.Thread(target=ui_server.serve_forever,daemon=True).start()
+    manager.start()
+    bridge.start()
     server = ThreadingHTTPServer((BIND_HOST, PORT), Handler)
 
     def request_shutdown(signum, frame):
@@ -375,9 +459,14 @@ if __name__ == "__main__":
     try:
         server.serve_forever()
     finally:
+        manager.close()
+        ui_server.shutdown()
+        ui_server.server_close()
+        bridge.close()
         for cam in list(LiveCam._all.values()):
             cam.stop_flag = True
         server.server_close()
         with lock:
             db.close()
+            review.close()
         log("sface_server shutdown complete")

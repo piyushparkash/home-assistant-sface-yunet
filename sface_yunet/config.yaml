@@ -1,5 +1,5 @@
 name: "SFace + YuNet Face Recognition"
-version: "1.0.2"
+version: "1.1.0"
 slug: "sface_yunet"
 description: "Local face detection, recognition and optional live camera overlays"
 url: "https://github.com/piyushparkash/home-assistant-sface-yunet/tree/main/sface_yunet"
@@ -11,6 +11,13 @@ boot: auto
 init: true
 timeout: 30
 host_network: true
+ingress: true
+ingress_port: 8099
+panel_icon: "mdi:face-recognition"
+panel_title: "Face library"
+homeassistant_api: true
+services:
+  - mqtt:want
 map:
   - type: homeassistant_config
     read_only: true
@@ -25,6 +32,12 @@ options:
   detection_score: 0.6
   recognition_threshold: 0.363
   min_available_memory_mb: 300
+  collect_unknowns: true
+  unknown_retention_days: 7
+  max_unknown_groups: 100
+  unknown_group_threshold: 0.6
+  match_margin: 0.05
+  mqtt_enabled: true
 schema:
   port: "port"
   trained_dir: "str"
@@ -33,3 +46,9 @@ schema:
   detection_score: "float(0.01,0.99)"
   recognition_threshold: "float(0,1)"
   min_available_memory_mb: "int(0,8192)"
+  collect_unknowns: bool
+  unknown_retention_days: "int(1,30)"
+  max_unknown_groups: "int(1,500)"
+  unknown_group_threshold: "float(0.3,0.95)"
+  match_margin: "float(0,0.5)"
+  mqtt_enabled: bool

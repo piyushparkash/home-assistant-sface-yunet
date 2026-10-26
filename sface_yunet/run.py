@@ -14,6 +14,12 @@ defaults = {
     "detection_score": ("DET_SCORE", 0.6),
     "recognition_threshold": ("SFACE_ACCEPT", 0.363),
     "min_available_memory_mb": ("MIN_AVAIL_MB", 300),
+    "collect_unknowns": ("COLLECT_UNKNOWNS", True),
+    "unknown_retention_days": ("UNKNOWN_RETENTION_DAYS", 7),
+    "max_unknown_groups": ("MAX_UNKNOWN_GROUPS", 100),
+    "unknown_group_threshold": ("UNKNOWN_GROUP_THRESHOLD", 0.6),
+    "match_margin": ("MATCH_MARGIN", 0.05),
+    "mqtt_enabled": ("MQTT_ENABLED", True),
 }
 for key, (variable, default) in defaults.items():
     os.environ[variable] = str(options.get(key, os.environ.get(variable, default)))

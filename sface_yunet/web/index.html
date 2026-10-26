@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SFace · Face library</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="./" aria-label="SFace home"><span class="face-mark" aria-hidden="true">◉</span><strong>SFace</strong><span class="brand-subtitle">Face library</span></a>
+    <span class="local-note">Stored on your Home Assistant</span>
+  </header>
+  <main>
+    <div class="page-title"><div><h1>A familiar face starts here.</h1><p>Review new faces, name the people you know, and keep their photos up to date.</p></div><button id="add-person" class="primary">Add face photos</button></div>
+    <div id="connection" class="connection" role="status">Connecting to your face library…</div>
+    <nav class="tabs" aria-label="Face library sections">
+      <button class="tab active" data-tab="review" aria-current="page">Review inbox <span id="review-count" class="count">0</span></button>
+      <button class="tab" data-tab="people">People <span id="people-count" class="count">0</span></button>
+      <button class="tab" data-tab="cameras">Cameras & automations</button>
+    </nav>
+    <section id="review-panel" aria-label="Review unknown faces">
+      <div class="section-intro"><h2>Who is this?</h2><p id="retention">Similar unknown faces are grouped for review. Check every photo before assigning a name.</p></div>
+      <div id="groups" class="face-grid"></div>
+    </section>
+    <section id="people-panel" aria-label="Enrolled people" hidden>
+      <div class="section-intro"><h2>Your people</h2><p>Add clear photos from different angles. Names can change; automation IDs stay the same.</p></div>
+      <div id="people" class="face-grid"></div>
+    </section>
+    <section id="cameras-panel" hidden>
+      <div class="section-intro"><h2>Bring your cameras into the loop</h2><p>Scan on demand, from an automation, or on a schedule. Your existing recognition clients continue to work.</p></div>
+      <div class="camera-layout"><div><div id="cameras"></div><button id="add-camera" class="secondary">Add Home Assistant camera</button></div>
+      <aside class="automation-guide"><h3>Ready for automations</h3><p>With Mosquitto and the Home Assistant MQTT integration set up, this app creates a device with:</p><ul><li>A recognition event with person, camera and score</li><li>A recently-seen sensor for each person</li><li>Counts for known people and pending groups</li><li>A scan button for each configured camera</li></ul><p id="mqtt-status"></p><p class="muted">Recently seen means detected in a camera image within the last two minutes. It is not whole-home presence.</p><h3>Use an event trigger</h3><p>In an automation, choose an entity state trigger for <code>event.sface_recognition</code>, then filter its <code>event_type</code>, <code>person_id</code> or <code>camera</code> attributes. See the app documentation for a complete example.</p></aside></div>
+    </section>
+  </main>
+  <dialog id="editor"><form id="editor-form"><div class="dialog-head"><h2 id="editor-title">Review face</h2><button type="button" id="close-editor" class="icon-button" aria-label="Close">×</button></div><div id="editor-body"></div><p id="form-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="editor-cancel" type="button" class="secondary">Cancel</button><button id="editor-save" type="submit" class="primary">Save</button></div></form></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
