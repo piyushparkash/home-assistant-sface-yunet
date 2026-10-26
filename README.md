@@ -9,8 +9,6 @@
 
 ![Review inbox showing three suggested unknown-face groups](docs/images/review-inbox.png)
 
-*Actual app UI with synthetic silhouettes and demo names. No personal faces or camera images are shown.*
-
 [Install](#install) · [Name faces](#name-faces) · [Connect a camera](#connect-a-camera) · [Automate](#automate) · [Full docs](sface_yunet/DOCS.md)
 
 - **Local processing:** CPU recognition on your Home Assistant host; no cloud account or API key.
