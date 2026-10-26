@@ -16,3 +16,10 @@ trained/
 models/
 *.log
 *.jsonl
+
+# Only reviewed, synthetic documentation captures may be published.
+!docs/images/review-inbox.png
+!docs/images/name-faces.png
+!docs/images/people.png
+!docs/images/camera-setup.png
+!docs/images/mobile.png

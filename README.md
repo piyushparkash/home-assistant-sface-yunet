@@ -5,107 +5,111 @@
 ![amd64](https://img.shields.io/badge/amd64-supported-green)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-CPU face detection and recognition that runs locally on your Home Assistant host.
-YuNet finds faces and landmarks; SFace creates embeddings and matches them against
-your enrolled photos. Optional RTSP overlays draw names and confidence scores.
+**Recognize familiar faces locally. Review unknown faces, give them a name, and use sightings in your automations.**
 
-This is an independent community app, not an official Home Assistant or OpenCV product.
-Raspberry Pi 4 (aarch64) is the original deployment platform; the amd64 build is
-checked in CI. Recognition and enrollment require no cloud service or API key.
+![Review inbox showing three suggested unknown-face groups](docs/images/review-inbox.png)
 
-## Installation
+*Actual app UI with synthetic silhouettes and demo names. No personal faces or camera images are shown.*
+
+[Install](#install) · [Name faces](#name-faces) · [Connect a camera](#connect-a-camera) · [Automate](#automate) · [Full docs](sface_yunet/DOCS.md)
+
+- **Local processing:** CPU recognition on your Home Assistant host; no cloud account or API key.
+- **Face library:** upload photos, review suggested groups, rename people, and remove samples.
+- **Home Assistant entities:** recognition events, recently-seen sensors, review counts, and camera scan buttons through MQTT.
+- **Pi friendly options:** on-demand snapshots, adjustable threads, a low-memory guard, and optional live overlays.
+
+Independent community app for **Home Assistant OS with Supervisor**, supporting ARM64 and AMD64. Install through the **app store**; HACS is not required.
+
+## Install
 
 [![Add this repository to your Home Assistant app store](https://my.home-assistant.io/badges/supervisor_store.svg)](https://my.home-assistant.io/redirect/supervisor_store/?repository_url=https%3A%2F%2Fgithub.com%2Fpiyushparkash%2Fhome-assistant-sface-yunet)
 
-1. In Home Assistant OS, open **Settings > Apps > Install app** (older versions:
-   **Settings > Add-ons > Add-on store**).
-2. Open the three-dot menu, select **Repositories**, and add:
-   `https://github.com/piyushparkash/home-assistant-sface-yunet`.
-3. Install **SFace + YuNet Face Recognition**. Supervisor builds it on your device;
-   the first build needs internet to download dependencies and approximately 37 MB
-   of checksum-verified models from OpenCV Zoo.
-4. Start the app and select **Open Web UI**. Upload photos in **People**, or
-   configure a camera and assign names to groups in the **Review inbox**.
-   Existing training folders and `POST /sync` remain supported; a legacy folder
-   is not required for UI-managed enrollment.
+1. Click the button above and add the repository. Alternatively, open **Settings → Apps → Install app → ⋮ → Repositories** and paste `https://github.com/piyushparkash/home-assistant-sface-yunet`.
+2. Install **SFace + YuNet Face Recognition** and start it. The first build downloads dependencies and about 37 MB of verified OpenCV models.
+3. Select **Open Web UI** to open your face library. On older Home Assistant versions, Apps is called **Add-ons**.
 
-The recognition API listens only on `127.0.0.1:5100`. Home Assistant Core can reach
-it locally. Face management is provided through authenticated Home Assistant
-Ingress; the local recognition API itself has no authentication.
-The app needs an installation with Supervisor app support; HACS is not required.
+To get automation entities, also install **Mosquitto broker** and configure Home Assistant's **MQTT integration**. The face library works without MQTT.
 
-## Features
+## Name faces
 
-- Multi-face detection and cosine-similarity recognition through OpenCV.
-- SQLite embeddings in private app storage; training files mounted read-only.
-- Optional live MJPEG overlays, with one shared capture loop per camera.
-- Low-memory refusal and configurable CPU thread count and detection settings.
-- Supervisor start/stop, automatic boot and cold app backups.
-- Face-management UI for uploading photos, naming people and removing samples.
-- Suggested unknown-face groups with selected-photo enrollment and bounded retention.
-- Home Assistant camera picker, on-demand scan buttons and optional scheduled snapshots.
-- MQTT discovery for recognition events, per-person recently-seen sensors and review counts.
+**Already have photos?** Click **Add face photos**, enter a name, and upload clear photos containing one face each.
 
-Set up the Mosquitto broker app and Home Assistant's MQTT integration to use the
-discovered automation entities. Face management and recognition also work without MQTT.
+**Saw someone new on camera?** Open a group in **Review inbox**, select the photos showing the same person, then choose an existing person or enter a new name. Click **Assign selected photos**. Unselected photos stay in the inbox.
 
-## Raspberry Pi 4 resource usage
+![Selecting an unknown-face photo and naming the person Taylor](docs/images/name-faces.png)
 
-Measured on a **Raspberry Pi 4 with 8 GB RAM**, running Home Assistant OS on
-aarch64 and app **1.0.2**. Settings: two OpenCV threads, detection width 640,
-and low-resolution RTSP camera substreams for live overlays.
+Find everyone in **People**. Open a person to rename them, add photos, or remove samples. Their automation ID stays the same when their display name changes.
 
-| Workload | App RAM (Docker working set) | CPU average | CPU observed range |
-| --- | --- | --- | --- |
-| Warmed app, no live viewers | ~241 MiB | 0.03% | ~0.03% |
-| One live face-overlay stream | ~245 MiB | ~77% | 61-94% |
-| Two live face-overlay streams | ~249-276 MiB | ~127% | 51-194% |
+<details>
+<summary>See the People screen and mobile layout</summary>
 
-**CPU percentages use Docker's scale: 100% means one fully occupied CPU core.**
-The Pi 4 has four cores, so 400% represents its total CPU capacity; the two-stream
-average above is about 32% of that capacity. Two OpenCV threads are a setting,
-not a hard CPU limit, and this app does not impose a container memory cap.
+![People screen with Alex, Sam and Taylor](docs/images/people.png)
 
-These are brief, four-sample measurements per workload, including stream startup,
-on a host also running Home Assistant automations. They show the app container's
-own resource use, not total host usage, and are not peak-memory or sustained-load
-guarantees. Camera resolution, lighting, visible faces, request frequency and
-other host workloads affect results. Memory allocations may remain after a
-stream closes. Snapshot recognition uses CPU while processing each request;
-the idle row is not a continuous-recognition benchmark.
+<img src="docs/images/mobile.png" alt="Face review inbox on a phone" width="300">
 
-Live capture and inference stop when the last viewer disconnects. For lightweight
-use, call `/recognize` on selected snapshots and open live overlays when needed.
-The default memory guard refuses recognition when host-available RAM falls below
-300 MB.
+</details>
 
-The installed ARM64 image is approximately **353 MiB uncompressed**, including
-the models and Python dependencies. Training photos, the embedding database,
-build cache and backups require additional disk space; Docker may share image
-layers with other apps.
+Suggested groups need your review; the app never enrolls an unknown person automatically. [Storage, retention and privacy details](sface_yunet/DOCS.md).
+
+## Connect a camera
+
+Open **Cameras & automations → Add Home Assistant camera**. Choose an existing camera entity and a label, then save. Use **Scan now**, an automation, or an optional schedule. Start with on-demand scans or once a minute on a Pi.
+
+![Camera setup with a Home Assistant camera picker and one-minute scan schedule](docs/images/camera-setup.png)
+
+Scans populate the review inbox and recognition entities. Existing HTTP clients and training folders are also supported: [API and configuration](sface_yunet/DOCS.md).
+
+## Automate
+
+With MQTT connected, open **Settings → Devices & services → MQTT → SFace face recognition**.
+
+| Want to… | Use this entity |
+| --- | --- |
+| React to a recognized or unknown face | `event.sface_recognition` |
+| Know whether Alex was seen recently | `binary_sensor.sface_person_alex` |
+| Show the last recognized name | `sensor.sface_last_recognized` |
+| Show how many groups need review | `sensor.sface_pending_groups` |
+| Scan a configured camera | Its discovered scan button |
+
+**Example: show “Welcome home, Alex!” when Alex is seen.** Paste into an automation's YAML editor and replace the entity with your person's discovered sensor:
+
+```yaml
+alias: Welcome Alex when recognized
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.sface_person_alex
+    from: "off"
+    to: "on"
+actions:
+  - action: persistent_notification.create
+    data:
+      title: Familiar face
+      message: "Welcome home, Alex!"
+mode: single
+```
+
+The sensor stays on for two minutes after a sighting, so continuous sightings do not repeat this notification. It indicates recent camera visibility, not whole-home presence. Entity IDs can vary; check your MQTT device. [Event filters and motion-triggered scans](sface_yunet/DOCS.md#home-assistant-automation-entities).
+
+## Raspberry Pi 4 · 8 GB
+
+Measured on ARM64, app **1.0.2**, two OpenCV threads and low-resolution RTSP overlays:
+
+| Workload | App RAM | Average CPU |
+| --- | --- | --- |
+| Warmed, no live viewers | ~241 MiB | 0.03% |
+| One live overlay | ~245 MiB | ~77% |
+| Two live overlays | ~249–276 MiB | ~127% |
+
+Docker CPU scale: **100% = one core; 400% = the Pi's four cores**. These are brief measurements, not sustained-load guarantees or a benchmark of the current face-library release. Snapshot scans consume CPU while processing. [Measurement conditions, CPU ranges, disk use and memory guard](docs/performance.md).
 
 ## Documentation and support
 
-- [Configuration, enrollment, API and Home Assistant examples](sface_yunet/DOCS.md)
-- [Release notes](sface_yunet/CHANGELOG.md)
-- [Model sources, authors, papers and licenses](sface_yunet/CREDITS.md)
-- [Security and privacy](SECURITY.md)
-- [Report an issue](https://github.com/piyushparkash/home-assistant-sface-yunet/issues)
+[Configuration & API](sface_yunet/DOCS.md) · [Release notes](sface_yunet/CHANGELOG.md) · [Privacy & security](SECURITY.md) · [Report an issue](https://github.com/piyushparkash/home-assistant-sface-yunet/issues)
 
-Your own automations decide how to act on recognition events or camera scan buttons. This
-repository does not include household automations, Alexa accounts, camera
-credentials, enrolled identities, face photos, or embeddings. Use recognition
-as an automation aid; similarity scores are not identity guarantees.
+Photos and embeddings stay in local app storage. The UI uses authenticated Home Assistant Ingress; the unauthenticated recognition API defaults to loopback only. Recognition scores are an automation aid, not an identity guarantee. No household data or automations are bundled.
 
-## Credits and license
+## Credits
 
-YuNet is by Wei Wu, Hanyang Peng and Shiqi Yu and is provided by OpenCV Zoo under
-the MIT license. SFace is contributed by Yaoyao Zhong, with ONNX conversion by
-Chengrui Wang, and provided under Apache-2.0. Both model source pages, papers,
-original repositories, exact download revision and hashes are in
-[CREDITS.md](sface_yunet/CREDITS.md); full model licenses are bundled with the app.
+**YuNet:** Wei Wu, Hanyang Peng and Shiqi Yu (MIT). **SFace:** Yaoyao Zhong; ONNX conversion by Chengrui Wang (Apache-2.0). Models are distributed through **OpenCV Zoo**. See [model sources, papers, hashes and bundled licenses](sface_yunet/CREDITS.md). App code is [MIT licensed](LICENSE).
 
-App/server code is MIT-licensed. Model weights and dependencies keep their own
-licenses. The installation/documentation structure follows Home Assistant's
-[example app repository](https://github.com/home-assistant/apps-example) and
-established community app repository conventions; the documentation here is original.
+Documentation layout takes inspiration from [Button Card](https://github.com/custom-cards/button-card), [ApexCharts Card](https://github.com/RomRider/apexcharts-card), and [WebRTC Camera](https://github.com/AlexxIT/WebRTC). All screenshots are of this app; [reproduce them with synthetic demo data](docs/capture_screenshots.py).
