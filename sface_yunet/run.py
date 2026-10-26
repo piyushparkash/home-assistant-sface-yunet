@@ -19,7 +19,9 @@ for key, (variable, default) in defaults.items():
     os.environ[variable] = str(options.get(key, os.environ.get(variable, default)))
 os.environ["BIND_HOST"] = "127.0.0.1"
 os.environ.setdefault("DATA_DIR", "/data")
-os.environ.setdefault("RTSP_CREDS_FILE", "/config/rtsp_creds.json")
+private_rtsp = Path(os.environ["DATA_DIR"]) / "rtsp_creds.json"
+os.environ.setdefault("RTSP_CREDS_FILE", str(private_rtsp) if private_rtsp.is_file()
+                      else "/config/rtsp_creds.json")
 if not Path(os.environ["TRAINED_DIR"]).is_dir():
     raise SystemExit("Create the configured trained_dir before starting the app; see DOCS.md.")
 os.execv(sys.executable, [sys.executable, "-u", str(Path(__file__).with_name("server.py"))])

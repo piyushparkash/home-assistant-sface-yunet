@@ -98,6 +98,9 @@ Recognition works without this file. A low-resolution camera substream reduces
 CPU and memory use. Some camera/backend errors may include RTSP URLs in logs;
 redact all logs before sharing.
 
+For migrations, an existing private `/data/rtsp_creds.json` is also supported and
+takes precedence over the public configuration file. Credentials stay on the host.
+
 Use `http://127.0.0.1:5100/live/camera_one` as the MJPEG URL in Home Assistant's
 **MJPEG IP Camera** integration. Home Assistant then proxies viewing through its
 own camera entity. Streams capture/infer only while a viewer is connected.

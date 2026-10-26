@@ -132,6 +132,8 @@ def do_recognize(data):
 
 
 def do_sync():
+    if not os.path.isdir(TRAINED):
+        return {"success": False, "error": "training directory unavailable; database unchanged"}
     t0 = time.perf_counter()
     on_disk = set()
     for path in glob.glob(os.path.join(TRAINED, "*", "*")):

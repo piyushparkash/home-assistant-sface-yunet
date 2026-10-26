@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -51,6 +52,19 @@ def exercise(low_memory=False):
                 else:
                     assert result["success"] and result["added"] == result["removed"] == 0
             print("Smoke checks passed", "low-memory" if low_memory else "normal")
+            database = base / "data/faces.db"
+            with sqlite3.connect(database) as db:
+                db.execute("insert into emb values (?,?,?,?)",
+                           ("synthetic", "test.jpg", b"synthetic-test-data", 0))
+                db.commit()
+            before = database.read_bytes()
+            (base / "trained").rmdir()
+            req = urllib.request.Request(url + "/sync", data=b"", method="POST")
+            with urllib.request.urlopen(req) as response:
+                result = json.load(response)
+            assert not result["success"] and "database unchanged" in result["error"]
+            assert database.read_bytes() == before
+            print("Missing training directory preserves database")
         finally:
             process.terminate()
             process.wait(timeout=10)
