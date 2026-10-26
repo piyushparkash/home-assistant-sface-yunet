@@ -106,6 +106,12 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(self.store.embeddings(),[])
         self.assertEqual(self.store.names(),{})
 
+    def test_new_name_does_not_silently_reuse_legacy_person_id(self):
+        with self.assertRaises(ValueError):
+            self.manager.change('upload',{'name':'Person One','image':base64.b64encode(JPEG).decode()})
+        self.assertEqual(self.store.embeddings(),[])
+        self.assertEqual((self.trained/'person_one'/'photo.jpg').read_bytes(),self.original)
+
     def test_camera_configuration_validates_entity_and_interval(self):
         for data in ({'entity':'http://example.invalid'},{'entity':'camera.test','interval':1}):
             with self.assertRaises(ValueError):

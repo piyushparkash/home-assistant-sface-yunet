@@ -1,4 +1,6 @@
 FROM python:3.11-slim-bookworm
+ARG BUILD_VERSION=1.1.1
+ENV APP_VERSION=${BUILD_VERSION}
 RUN pip install --no-cache-dir opencv-python-headless==4.14.0.94 numpy==2.4.6 paho-mqtt==2.1.0
 WORKDIR /app
 COPY download_models.py /app/download_models.py

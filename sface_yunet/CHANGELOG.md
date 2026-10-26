@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1
+
+- Open the face library on a fresh install even when no legacy training folder
+  exists. Keep the configured path and preserve existing enrollment; sync still
+  refuses an unavailable folder.
+- Reject new names that collide with an existing legacy person ID, requiring
+  explicit selection before adding photos to that identity.
+- Report the built app version in MQTT device information.
+
 ## 1.1.0
 
 - Add an Ingress face library with uploads, display-name editing and sample removal.

@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 
 from ha_bridge import supervisor
+from review_store import identifier
 
 
 def legacy_id(person, filename):
@@ -83,6 +84,8 @@ class FaceManager:
                 name=data.get('name','').strip()
                 if not person and (not name or len(name)>80):
                     raise ValueError('Enter a name or select an existing person')
+                if not person and identifier(name) in ids:
+                    raise ValueError('This person ID already exists. Choose that person from the list or use a different name.')
                 if action=='upload':
                     try:
                         raw=base64.b64decode(data.get('image',''),validate=True)

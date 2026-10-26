@@ -13,10 +13,11 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def exercise(low_memory=False):
+def exercise(low_memory=False,missing_training=False):
     with tempfile.TemporaryDirectory() as directory:
         base = Path(directory)
-        (base / "trained").mkdir()
+        if not missing_training:
+            (base / "trained").mkdir()
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
@@ -58,7 +59,10 @@ def exercise(low_memory=False):
                     expected = "host low memory" if low_memory and sys.platform == "linux" else "bad image"
                     assert not result["success"] and result["error"] == expected, result
                 else:
-                    assert result["success"] and result["added"] == result["removed"] == 0
+                    if missing_training:
+                        assert not result['success'] and 'database unchanged' in result['error']
+                    else:
+                        assert result["success"] and result["added"] == result["removed"] == 0
             print("Smoke checks passed", "low-memory" if low_memory else "normal")
             database = base / "data/faces.db"
             with sqlite3.connect(database) as db:
@@ -67,7 +71,8 @@ def exercise(low_memory=False):
                 db.commit()
             db.close()
             before = database.read_bytes()
-            (base / "trained").rmdir()
+            if (base / "trained").exists():
+                (base / "trained").rmdir()
             req = urllib.request.Request(url + "/sync", data=b"", method="POST")
             with urllib.request.urlopen(req) as response:
                 result = json.load(response)
@@ -87,3 +92,4 @@ def exercise(low_memory=False):
 if __name__ == "__main__":
     exercise()
     exercise(low_memory=True)
+    exercise(missing_training=True)

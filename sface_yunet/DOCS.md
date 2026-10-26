@@ -4,8 +4,10 @@
 
 Select **Open Web UI** on the app page. The UI is proxied and authenticated through
 Home Assistant Ingress; its separate listener accepts only Supervisor and local
-host connections. Create the configured training folder once before the first
-start. Existing installations retain their selected training path.
+host connections. You can start and enroll through the UI without creating any
+training folders. Existing installations retain their selected legacy training
+path. If that folder is unavailable, the existing embedding database is preserved
+and `/sync` refuses to remove enrollments; UI-managed enrollment still works.
 
 - **People:** upload a clear photo with exactly one face, create a person or choose
   an existing person, rename their display name, or remove individual photos.

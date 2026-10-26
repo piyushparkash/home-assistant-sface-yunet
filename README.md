@@ -24,10 +24,10 @@ checked in CI. Recognition and enrollment require no cloud service or API key.
 3. Install **SFace + YuNet Face Recognition**. Supervisor builds it on your device;
    the first build needs internet to download dependencies and approximately 37 MB
    of checksum-verified models from OpenCV Zoo.
-4. Create the configured training folder once (default `/config/faces/trained`),
-   then start the app and select **Open Web UI**. Upload photos in **People**, or
+4. Start the app and select **Open Web UI**. Upload photos in **People**, or
    configure a camera and assign names to groups in the **Review inbox**.
-   Existing training folders and `POST /sync` remain supported.
+   Existing training folders and `POST /sync` remain supported; a legacy folder
+   is not required for UI-managed enrollment.
 
 The recognition API listens only on `127.0.0.1:5100`. Home Assistant Core can reach
 it locally. Face management is provided through authenticated Home Assistant

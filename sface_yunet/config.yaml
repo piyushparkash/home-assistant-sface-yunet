@@ -1,5 +1,5 @@
 name: "SFace + YuNet Face Recognition"
-version: "1.1.0"
+version: "1.1.1"
 slug: "sface_yunet"
 description: "Local face detection, recognition and optional live camera overlays"
 url: "https://github.com/piyushparkash/home-assistant-sface-yunet/tree/main/sface_yunet"

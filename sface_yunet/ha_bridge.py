@@ -50,7 +50,7 @@ class HomeAssistantBridge:
                 'default_entity_id':component+'.sface_'+key,
                 'availability_topic':self.root+'/availability',
                 'device':{'identifiers':['sface_'+self.instance],'name':'SFace face recognition',
-                          'manufacturer':'Community','model':'YuNet + SFace','sw_version':'1.1.0'},
+                          'manufacturer':'Community','model':'YuNet + SFace','sw_version':os.environ.get('APP_VERSION','1.1.1')},
                 **settings}
         self.client.publish('homeassistant/'+component+'/'+unique+'/config',json.dumps(config),qos=1,retain=True)
         self.discovered.add((component,key))
